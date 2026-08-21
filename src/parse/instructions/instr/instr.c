@@ -4002,6 +4002,80 @@ int parse_instr_line(char *tokens[], int ntok, const char *raw_trimmed) {
         return 1;
     }
 
+    /* vfms fA, fB, fC > fDST;  packed 2x-f64 fused multiply-subtract --
+       sibling of 'vfma' just above (see the OP_VFMS opcode_t comment
+       for the full contract: fDST = (fA*fB)-fC). Identical parse shape
+       to 'vfma' (same three-source block, same f-register-only/
+       f64-only restriction, same operand-order and error-message
+       conventions) -- only the opcode and the mnemonic in error
+       messages differ. */
+    if (strcmp(tokens[0], "vfms") == 0) {
+        g_uses_float = 1;
+        char buf[MAX_LINE];
+        strncpy(buf, raw_trimmed, sizeof(buf) - 1);
+        buf[sizeof(buf)-1] = '\0';
+        char atok[MAX_SYMLEN], btok[MAX_SYMLEN], ctok[MAX_SYMLEN], dsttok[MAX_SYMLEN];
+        if (sscanf(buf, "%*s %63[^,], %63[^,], %63s > %63s", atok, btok, ctok, dsttok) != 4)
+            fail("malformed 'vfms': expected 'vfms fA, fB, fC > fDST;'");
+        strip__semicolon(dsttok);
+
+        instr_t i; memset(&i, 0, sizeof(i));
+        i.op = OP_VFMS;
+        /* cas_expected/result_reg/cas_desired reused as fA/fB/fC, same
+           as OP_VFMA/OP_FMA -- see the instr_t field comments and the
+           OP_VFMS opcode_t comment. */
+        parse__operand(atok, &i.cas_expected);
+        parse__operand(btok, &i.result_reg);
+        parse__operand(ctok, &i.cas_desired);
+        parse__operand(dsttok, &i.dst);
+        if (i.cas_expected.kind != OPND_REG || !i.cas_expected.is_float || i.cas_expected.is_f32)
+            failf("'vfms': fA must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", atok);
+        if (i.result_reg.kind != OPND_REG || !i.result_reg.is_float || i.result_reg.is_f32)
+            failf("'vfms': fB must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", btok);
+        if (i.cas_desired.kind != OPND_REG || !i.cas_desired.is_float || i.cas_desired.is_f32)
+            failf("'vfms': fC must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", ctok);
+        if (i.dst.kind != OPND_REG || !i.dst.is_float || i.dst.is_f32)
+            fail("'vfms' requires an f-register (f1-f8) as its destination -- a packed 2x-f64 op has no s-register (f32) form (vfms fA, fB, fC > fX)");
+        push__instr(i);
+        return 1;
+    }
+
+    /* vfnma fA, fB, fC > fDST;  packed 2x-f64 fused negate-multiply-add
+       -- sibling of 'vfma'/'vfms' above (see the OP_VFNMA opcode_t
+       comment for the full contract: fDST = fC-(fA*fB)). Identical
+       parse shape to 'vfma'/'vfms' -- only the opcode and the mnemonic
+       in error messages differ. */
+    if (strcmp(tokens[0], "vfnma") == 0) {
+        g_uses_float = 1;
+        char buf[MAX_LINE];
+        strncpy(buf, raw_trimmed, sizeof(buf) - 1);
+        buf[sizeof(buf)-1] = '\0';
+        char atok[MAX_SYMLEN], btok[MAX_SYMLEN], ctok[MAX_SYMLEN], dsttok[MAX_SYMLEN];
+        if (sscanf(buf, "%*s %63[^,], %63[^,], %63s > %63s", atok, btok, ctok, dsttok) != 4)
+            fail("malformed 'vfnma': expected 'vfnma fA, fB, fC > fDST;'");
+        strip__semicolon(dsttok);
+
+        instr_t i; memset(&i, 0, sizeof(i));
+        i.op = OP_VFNMA;
+        /* cas_expected/result_reg/cas_desired reused as fA/fB/fC, same
+           as OP_VFMA/OP_VFMS/OP_FMA -- see the instr_t field comments
+           and the OP_VFNMA opcode_t comment. */
+        parse__operand(atok, &i.cas_expected);
+        parse__operand(btok, &i.result_reg);
+        parse__operand(ctok, &i.cas_desired);
+        parse__operand(dsttok, &i.dst);
+        if (i.cas_expected.kind != OPND_REG || !i.cas_expected.is_float || i.cas_expected.is_f32)
+            failf("'vfnma': fA must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", atok);
+        if (i.result_reg.kind != OPND_REG || !i.result_reg.is_float || i.result_reg.is_f32)
+            failf("'vfnma': fB must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", btok);
+        if (i.cas_desired.kind != OPND_REG || !i.cas_desired.is_float || i.cas_desired.is_f32)
+            failf("'vfnma': fC must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", ctok);
+        if (i.dst.kind != OPND_REG || !i.dst.is_float || i.dst.is_f32)
+            fail("'vfnma' requires an f-register (f1-f8) as its destination -- a packed 2x-f64 op has no s-register (f32) form (vfnma fA, fB, fC > fX)");
+        push__instr(i);
+        return 1;
+    }
+
     /* Implicit libc-call: 'NAME(args) [> rX];' with no leading
        'libc-call' keyword at all. This is now the ONLY valid spelling
        for calling a declared extern, except in the one collision case

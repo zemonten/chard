@@ -2083,6 +2083,54 @@ void emit__aarch64(FILE *out) {
             break;
         }
 
+        case OP_VFMS: {
+            /* fDST = fA*fB - fC lane-wise. Unlike OP_VFMA/OP_VFNMA,
+               NEON has no direct "dst = a*b - c" instruction -- fmla
+               and fmls are both accumulating onto dst (dst += a*b and
+               dst -= a*b respectively). Negating fA (or fB) and using
+               fmla would give dst = fC + (-fA)*fB = fC - fA*fB, which
+               is OP_VFNMA's sign, not this one -- so instead fC itself
+               is negated into the shared f-scratch register first
+               (native fneg v.2d, the same instruction OP_VNEG's case
+               already uses -- see that case for why AArch64 gets a
+               native form here where x86-64 needs a mask), that
+               negated value is moved into dst (same fmov v.16b idiom
+               as OP_VFMA, just sourced from the scratch register
+               instead of fC directly), then fmla accumulates fA*fB
+               onto it: dst = (-fC) + fA*fB = fA*fB - fC. The only vN
+               op where AArch64 needs a scratch register the other two
+               targets don't -- x86-64 has a native vfmsub213pd,
+               RISC-V has a native fmsub.d (see the OP_VFMS opcode_t
+               comment). */
+            const char *dstd = reg__name(TARGET_AARCH64, &ins->dst);
+            const char *ad = reg__name(TARGET_AARCH64, &ins->cas_expected);
+            const char *bd = reg__name(TARGET_AARCH64, &ins->result_reg);
+            const char *cd = reg__name(TARGET_AARCH64, &ins->cas_desired);
+            const char *fscratch = target_defs[TARGET_AARCH64].fscratch;
+            fprintf(out, "    fneg v%s.2d, v%s.2d\n", fscratch + 1, cd + 1);
+            fprintf(out, "    fmov v%s.16b, v%s.16b\n", dstd + 1, fscratch + 1);
+            fprintf(out, "    fmla v%s.2d, v%s.2d, v%s.2d\n", dstd + 1, ad + 1, bd + 1);
+            break;
+        }
+
+        case OP_VFNMA: {
+            /* fDST = fC-(fA*fB) lane-wise. This is the one vfma variant
+               NEON has a *direct* instruction for -- fmls v.2d, v.2d,
+               v.2d computes dst -= a*b (dst = dst - a*b) natively, and
+               that's exactly this variant's sign once fC is sitting in
+               dst: dst = fC - fA*fB. fC is moved into dst first (same
+               fmov v.16b idiom as OP_VFMA), then a single fmls does the
+               rest -- no scratch register needed, unlike OP_VFMS above. */
+            const char *dstd = reg__name(TARGET_AARCH64, &ins->dst);
+            const char *ad = reg__name(TARGET_AARCH64, &ins->cas_expected);
+            const char *bd = reg__name(TARGET_AARCH64, &ins->result_reg);
+            const char *cd = reg__name(TARGET_AARCH64, &ins->cas_desired);
+            if (strcmp(dstd, cd) != 0)
+                fprintf(out, "    fmov v%s.16b, v%s.16b\n", dstd + 1, cd + 1);
+            fprintf(out, "    fmls v%s.2d, v%s.2d, v%s.2d\n", dstd + 1, ad + 1, bd + 1);
+            break;
+        }
+
         case OP_FCMP:
             /* fcmp dst, src -- same LHS/RHS convention as OP_CMP (see
                OP_CMP's own comment at parse time and the opcode_t

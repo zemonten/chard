@@ -1910,6 +1910,32 @@ void emit_x86_64(FILE *out) {
             break;
         }
 
+        case OP_VFMS: {
+            /* fDST = fA*fB - fC lane-wise via vfmsub213pd -- OP_VFMA's
+               subtract sibling, same destructive-dst 213-form (fB moved
+               into dst first if they differ, same move-if-different
+               guard), just the 'sub' mnemonic swap. See the OP_VFMS
+               opcode_t comment for why AArch64/RISC-V need different
+               shaped codegen for this same operation. */
+            if (strcmp(reg__name(TARGET_X86_64, &ins->dst), reg__name(TARGET_X86_64, &ins->result_reg)) != 0)
+                fprintf(out, "    movapd %s, %s\n", reg__name(TARGET_X86_64, &ins->dst), reg__name(TARGET_X86_64, &ins->result_reg));
+            fprintf(out, "    vfmsub213pd %s, %s, %s\n", reg__name(TARGET_X86_64, &ins->dst),
+                    reg__name(TARGET_X86_64, &ins->cas_expected), reg__name(TARGET_X86_64, &ins->cas_desired));
+            break;
+        }
+
+        case OP_VFNMA: {
+            /* fDST = fC-(fA*fB) lane-wise via vfnmadd213pd -- OP_VFMA's
+               negate sibling, same destructive-dst 213-form (fB moved
+               into dst first if they differ, same move-if-different
+               guard), just the 'nmadd' mnemonic swap. */
+            if (strcmp(reg__name(TARGET_X86_64, &ins->dst), reg__name(TARGET_X86_64, &ins->result_reg)) != 0)
+                fprintf(out, "    movapd %s, %s\n", reg__name(TARGET_X86_64, &ins->dst), reg__name(TARGET_X86_64, &ins->result_reg));
+            fprintf(out, "    vfnmadd213pd %s, %s, %s\n", reg__name(TARGET_X86_64, &ins->dst),
+                    reg__name(TARGET_X86_64, &ins->cas_expected), reg__name(TARGET_X86_64, &ins->cas_desired));
+            break;
+        }
+
         case OP_FCMP:
             /* ucomisd dst, src -- same LHS/RHS convention as integer
                OP_CMP (dst is the left/accumulator operand, src is the

@@ -1993,17 +1993,17 @@ void emit__riscv(FILE *out) {
                 g_riscv_vadd_warned = 1;
                 fprintf(stderr,
                     "note: 'vadd'/'vsub'/'vmul'/'vdiv'/'vmin'/'vmax'/'vsqrt'/'vabs'/'vneg'/'vdup'/"
-                    "'vfma' on --target=riscv are NOT real SIMD -- RISC-V has no fixed-width "
-                    "packed-double register (unlike x86-64 SSE2/AArch64 NEON), only the Vector "
-                    "extension (RVV), which needs runtime vsetvli setup this compiler does not "
-                    "emit. Falling back to two sequential scalar instructions per op (lane 0 = "
-                    "your values, lane 1 = the identity op'd with itself for the two-operand "
-                    "forms, applied to a synthesized 0.0 for the unary forms, the same broadcast "
-                    "value again for vdup, or 0*0+0 for vfma -- matching what an unused upper "
-                    "lane always holds on the other two targets: 0.0 for "
-                    "add/sub/mul/min/max/sqrt/abs/fma, NaN for div, -0.0 for neg, the broadcast "
-                    "value itself for dup) -- correct result, but no parallelism and no speed "
-                    "benefit over the plain scalar f-ops on this target.\n");
+                    "'vfma'/'vfms'/'vfnma' on --target=riscv are NOT real SIMD -- RISC-V has no "
+                    "fixed-width packed-double register (unlike x86-64 SSE2/AArch64 NEON), only "
+                    "the Vector extension (RVV), which needs runtime vsetvli setup this compiler "
+                    "does not emit. Falling back to two sequential scalar instructions per op "
+                    "(lane 0 = your values, lane 1 = the identity op'd with itself for the "
+                    "two-operand forms, applied to a synthesized 0.0 for the unary forms, the "
+                    "same broadcast value again for vdup, or 0*0+0/-0*0+0 for vfma/vfms/vfnma -- "
+                    "matching what an unused upper lane always holds on the other two targets: "
+                    "0.0 for add/sub/mul/min/max/sqrt/abs/fma/fms/fnma, NaN for div, -0.0 for neg, "
+                    "the broadcast value itself for dup) -- correct result, but no parallelism "
+                    "and no speed benefit over the plain scalar f-ops on this target.\n");
             }
             {
                 const char *dstreg = reg__name(TARGET_RISCV, &ins->dst);
@@ -2041,17 +2041,17 @@ void emit__riscv(FILE *out) {
                 g_riscv_vadd_warned = 1;
                 fprintf(stderr,
                     "note: 'vadd'/'vsub'/'vmul'/'vdiv'/'vmin'/'vmax'/'vsqrt'/'vabs'/'vneg'/'vdup'/"
-                    "'vfma' on --target=riscv are NOT real SIMD -- RISC-V has no fixed-width "
-                    "packed-double register (unlike x86-64 SSE2/AArch64 NEON), only the Vector "
-                    "extension (RVV), which needs runtime vsetvli setup this compiler does not "
-                    "emit. Falling back to two sequential scalar instructions per op (lane 0 = "
-                    "your values, lane 1 = the identity op'd with itself for the two-operand "
-                    "forms, applied to a synthesized 0.0 for the unary forms, the same broadcast "
-                    "value again for vdup, or 0*0+0 for vfma -- matching what an unused upper "
-                    "lane always holds on the other two targets: 0.0 for "
-                    "add/sub/mul/min/max/sqrt/abs/fma, NaN for div, -0.0 for neg, the broadcast "
-                    "value itself for dup) -- correct result, but no parallelism and no speed "
-                    "benefit over the plain scalar f-ops on this target.\n");
+                    "'vfma'/'vfms'/'vfnma' on --target=riscv are NOT real SIMD -- RISC-V has no "
+                    "fixed-width packed-double register (unlike x86-64 SSE2/AArch64 NEON), only "
+                    "the Vector extension (RVV), which needs runtime vsetvli setup this compiler "
+                    "does not emit. Falling back to two sequential scalar instructions per op "
+                    "(lane 0 = your values, lane 1 = the identity op'd with itself for the "
+                    "two-operand forms, applied to a synthesized 0.0 for the unary forms, the "
+                    "same broadcast value again for vdup, or 0*0+0/-0*0+0 for vfma/vfms/vfnma -- "
+                    "matching what an unused upper lane always holds on the other two targets: "
+                    "0.0 for add/sub/mul/min/max/sqrt/abs/fma/fms/fnma, NaN for div, -0.0 for neg, "
+                    "the broadcast value itself for dup) -- correct result, but no parallelism "
+                    "and no speed benefit over the plain scalar f-ops on this target.\n");
             }
             {
                 const char *dstreg = reg__name(TARGET_RISCV, &ins->dst);
@@ -2064,6 +2064,91 @@ void emit__riscv(FILE *out) {
                 /* Lane 1: 0*0+0 = 0.0, discarded. */
                 fprintf(out, "    fcvt.d.w %s, zero\n", fscratch);
                 fprintf(out, "    fmadd.d %s, %s, %s, %s\n", fscratch, fscratch, fscratch, fscratch);
+            }
+            break;
+        }
+
+        case OP_VFMS: {
+            /* Same "no fixed-width packed register" gap as OP_VFMA
+               above -- see that case and OP_VADD for the shared
+               rationale and warning. fmsub.d dst, fA, fB, fC computes
+               fA*fB - fC directly and natively -- despite RISC-V's
+               confusing FMA naming (see OP_FMA's own RISC-V case),
+               fmsub.d is the one member of the family whose name
+               matches intuition, so lane 0 is a direct mnemonic swap
+               from OP_VFMA's fmadd.d, no restructuring needed. Lane 1
+               is 0*0-0 = 0.0, discarded, same identity-fallback shape
+               as OP_VFMA. */
+            if (!g_riscv_vadd_warned) {
+                g_riscv_vadd_warned = 1;
+                fprintf(stderr,
+                    "note: 'vadd'/'vsub'/'vmul'/'vdiv'/'vmin'/'vmax'/'vsqrt'/'vabs'/'vneg'/'vdup'/"
+                    "'vfma'/'vfms'/'vfnma' on --target=riscv are NOT real SIMD -- RISC-V has no "
+                    "fixed-width packed-double register (unlike x86-64 SSE2/AArch64 NEON), only "
+                    "the Vector extension (RVV), which needs runtime vsetvli setup this compiler "
+                    "does not emit. Falling back to two sequential scalar instructions per op "
+                    "(lane 0 = your values, lane 1 = the identity op'd with itself for the "
+                    "two-operand forms, applied to a synthesized 0.0 for the unary forms, the "
+                    "same broadcast value again for vdup, or 0*0+0/-0*0+0 for vfma/vfms/vfnma -- "
+                    "matching what an unused upper lane always holds on the other two targets: "
+                    "0.0 for add/sub/mul/min/max/sqrt/abs/fma/fms/fnma, NaN for div, -0.0 for neg, "
+                    "the broadcast value itself for dup) -- correct result, but no parallelism "
+                    "and no speed benefit over the plain scalar f-ops on this target.\n");
+            }
+            {
+                const char *dstreg = reg__name(TARGET_RISCV, &ins->dst);
+                const char *areg = reg__name(TARGET_RISCV, &ins->cas_expected);
+                const char *breg = reg__name(TARGET_RISCV, &ins->result_reg);
+                const char *creg = reg__name(TARGET_RISCV, &ins->cas_desired);
+                const char *fscratch = target_defs[TARGET_RISCV].fscratch;
+                /* Lane 0: the real fused multiply-subtract. */
+                fprintf(out, "    fmsub.d %s, %s, %s, %s\n", dstreg, areg, breg, creg);
+                /* Lane 1: 0*0-0 = 0.0, discarded. */
+                fprintf(out, "    fcvt.d.w %s, zero\n", fscratch);
+                fprintf(out, "    fmsub.d %s, %s, %s, %s\n", fscratch, fscratch, fscratch, fscratch);
+            }
+            break;
+        }
+
+        case OP_VFNMA: {
+            /* Same "no fixed-width packed register" gap as OP_VFMA/
+               OP_VFMS above. fnmsub.d dst, fA, fB, fC computes
+               -(fA*fB)+fC = fC-(fA*fB) directly -- despite the name
+               suggesting "negate, then subtract" (RISC-V's FNMSUB/
+               FNMADD naming is inverted from what it looks like; see
+               the ISA manual's own note, referenced in OP_VFMS above
+               and OP_FMA's RISC-V case), fnmsub.d's actual semantics
+               are exactly this variant's, so lane 0 is a direct
+               mnemonic swap, no restructuring needed. Lane 1 is
+               -(0*0)+0 = 0.0, discarded, same identity-fallback shape
+               as OP_VFMA/OP_VFMS. */
+            if (!g_riscv_vadd_warned) {
+                g_riscv_vadd_warned = 1;
+                fprintf(stderr,
+                    "note: 'vadd'/'vsub'/'vmul'/'vdiv'/'vmin'/'vmax'/'vsqrt'/'vabs'/'vneg'/'vdup'/"
+                    "'vfma'/'vfms'/'vfnma' on --target=riscv are NOT real SIMD -- RISC-V has no "
+                    "fixed-width packed-double register (unlike x86-64 SSE2/AArch64 NEON), only "
+                    "the Vector extension (RVV), which needs runtime vsetvli setup this compiler "
+                    "does not emit. Falling back to two sequential scalar instructions per op "
+                    "(lane 0 = your values, lane 1 = the identity op'd with itself for the "
+                    "two-operand forms, applied to a synthesized 0.0 for the unary forms, the "
+                    "same broadcast value again for vdup, or 0*0+0/-0*0+0 for vfma/vfms/vfnma -- "
+                    "matching what an unused upper lane always holds on the other two targets: "
+                    "0.0 for add/sub/mul/min/max/sqrt/abs/fma/fms/fnma, NaN for div, -0.0 for neg, "
+                    "the broadcast value itself for dup) -- correct result, but no parallelism "
+                    "and no speed benefit over the plain scalar f-ops on this target.\n");
+            }
+            {
+                const char *dstreg = reg__name(TARGET_RISCV, &ins->dst);
+                const char *areg = reg__name(TARGET_RISCV, &ins->cas_expected);
+                const char *breg = reg__name(TARGET_RISCV, &ins->result_reg);
+                const char *creg = reg__name(TARGET_RISCV, &ins->cas_desired);
+                const char *fscratch = target_defs[TARGET_RISCV].fscratch;
+                /* Lane 0: the real negate-multiply-add. */
+                fprintf(out, "    fnmsub.d %s, %s, %s, %s\n", dstreg, areg, breg, creg);
+                /* Lane 1: -(0*0)+0 = 0.0, discarded. */
+                fprintf(out, "    fcvt.d.w %s, zero\n", fscratch);
+                fprintf(out, "    fnmsub.d %s, %s, %s, %s\n", fscratch, fscratch, fscratch, fscratch);
             }
             break;
         }

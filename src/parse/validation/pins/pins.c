@@ -331,7 +331,7 @@ void check_global_pin_violations(void) {
             case OP_FSQRT: case OP_FABS: case OP_FNEG: case OP_FMIN: case OP_FMAX: case OP_FMA:
             case OP_VADD: case OP_VSUB: case OP_VMUL: case OP_VDIV:
             case OP_VMIN: case OP_VMAX: case OP_VSQRT: case OP_VABS: case OP_VNEG: case OP_VDUP:
-            case OP_VFMA:
+            case OP_VFMA: case OP_VFMS: case OP_VFNMA:
             case OP_VLOAD:
                 break;
 
