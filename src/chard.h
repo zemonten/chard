@@ -38,7 +38,7 @@
 #include "preprocess/sys-include/sys-include.h"
 #include "preprocess/directives/directives.h"
 #include "preprocess/file/file.h"
-#include "backend/x86/x86.h"
+#include "backend/x86_64/x86_64.h"
 #include "backend/aarch64/aarch64.h"
 #include "backend/riscv/riscv.h"
 #include "driver/driver.h"
