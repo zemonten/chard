@@ -3961,6 +3961,47 @@ int parse_instr_line(char *tokens[], int ntok, const char *raw_trimmed) {
         return 1;
     }
 
+    /* vfma fA, fB, fC > fDST;  packed 2x-f64 fused multiply-add -- the
+       vN family's counterpart to 'fma' just above (see the OP_VFMA
+       opcode_t comment for the full contract). Same three-source shape
+       as 'fma', so it needs the same dedicated parse block for the same
+       reason ('src > dst' from float_ops' shared loop doesn't fit three
+       sources) -- but register-only AND f64-only (f-registers, never
+       s-registers), unlike 'fma' which allows f32 via s-registers.
+       There's no vfma-of-s-registers the same way there's no
+       vadd-of-s-registers: the whole vN family only operates on the
+       f1-f8 128-bit-pair file (see OP_VADD's opcode_t comment). */
+    if (strcmp(tokens[0], "vfma") == 0) {
+        g_uses_float = 1;
+        char buf[MAX_LINE];
+        strncpy(buf, raw_trimmed, sizeof(buf) - 1);
+        buf[sizeof(buf)-1] = '\0';
+        char atok[MAX_SYMLEN], btok[MAX_SYMLEN], ctok[MAX_SYMLEN], dsttok[MAX_SYMLEN];
+        if (sscanf(buf, "%*s %63[^,], %63[^,], %63s > %63s", atok, btok, ctok, dsttok) != 4)
+            fail("malformed 'vfma': expected 'vfma fA, fB, fC > fDST;'");
+        strip__semicolon(dsttok);
+
+        instr_t i; memset(&i, 0, sizeof(i));
+        i.op = OP_VFMA;
+        /* cas_expected/result_reg/cas_desired reused as fA/fB/fC, same
+           as OP_FMA -- see the instr_t field comments and the OP_VFMA
+           opcode_t comment. */
+        parse__operand(atok, &i.cas_expected);
+        parse__operand(btok, &i.result_reg);
+        parse__operand(ctok, &i.cas_desired);
+        parse__operand(dsttok, &i.dst);
+        if (i.cas_expected.kind != OPND_REG || !i.cas_expected.is_float || i.cas_expected.is_f32)
+            failf("'vfma': fA must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", atok);
+        if (i.result_reg.kind != OPND_REG || !i.result_reg.is_float || i.result_reg.is_f32)
+            failf("'vfma': fB must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", btok);
+        if (i.cas_desired.kind != OPND_REG || !i.cas_desired.is_float || i.cas_desired.is_f32)
+            failf("'vfma': fC must be an f-register (f1-f8), not '%s' -- a packed 2x-f64 op has no s-register (f32) form", ctok);
+        if (i.dst.kind != OPND_REG || !i.dst.is_float || i.dst.is_f32)
+            fail("'vfma' requires an f-register (f1-f8) as its destination -- a packed 2x-f64 op has no s-register (f32) form (vfma fA, fB, fC > fX)");
+        push__instr(i);
+        return 1;
+    }
+
     /* Implicit libc-call: 'NAME(args) [> rX];' with no leading
        'libc-call' keyword at all. This is now the ONLY valid spelling
        for calling a declared extern, except in the one collision case

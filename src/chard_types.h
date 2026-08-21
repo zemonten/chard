@@ -543,6 +543,60 @@ typedef enum {
                        there's no per-lane computation at all, just two
                        copies of the same value. Shares OP_VADD's
                        one-time stderr note. */
+    OP_VFMA,      /* vfma fA, fB, fC > fDST;  packed 2x-f64 fused
+                       multiply-add: fDST = (fA*fB)+fC lane-wise, each
+                       lane computed with a single rounding step (x86
+                       AVX2+FMA vfmadd213pd, AArch64 NEON fmla v.2d,
+                       fallback below on RISC-V). The vN family's
+                       counterpart to OP_FMA -- see that opcode_t
+                       comment for the scalar version this mirrors.
+                       Reuses the same cas_expected/result_reg/
+                       cas_desired trio as OP_FMA for fA/fB/fC (see the
+                       instr_t field comments), parsed in its own block
+                       for the same reason OP_FMA needs one: three
+                       source operands don't fit float_ops' shared
+                       'src > dst' shape.
+
+                       Unlike OP_FMA, register-only on all four operands
+                       AND f64-only (f-registers, never s-registers) --
+                       OP_FMA supports f32 via s1-s8 because scalar fma
+                       has a native narrow form on every target, but the
+                       whole vN family only ever operates on the f1-f8
+                       128-bit-pair file (see OP_VADD's opcode_t
+                       comment), so there's no vfma-of-s-registers to
+                       support any more than there's a vadd-of-
+                       s-registers. fA/fB/fC/dst must all be f-registers;
+                       an s-register anywhere in the four is rejected at
+                       parse time rather than silently misinterpreted.
+
+                       x86-64: fB must first be moved into dst (the
+                       213-form's implicit second multiplicand) if they
+                       differ, same destructive-dst dance OP_FMA's own
+                       x86-64 case already does, just with the packed
+                       'pd' forms (movapd, vfmadd213pd) instead of the
+                       scalar 'sd' ones. AArch64: NEON fmla is
+                       accumulating (dst += fA*fB) rather than a fresh
+                       three-source op the way scalar fmadd is, so fC is
+                       moved into dst first (movi-free reg-to-reg fmov
+                       v.16b), then fmla v.2d accumulates fA*fB on top --
+                       a different shape from OP_FMA's direct
+                       three-operand AArch64 fmadd, driven entirely by
+                       what NEON's instruction set actually offers.
+
+                       RISC-V has no packed register (same gap as every
+                       other vN op -- see OP_VADD). Falls back to two
+                       scalar fmadd.d's: lane 0 is the real
+                       fmadd.d dst, fA, fB, fC (RISC-V's fused
+                       multiply-add already takes three distinct source
+                       registers, same shape as OP_FMA's own RISC-V
+                       case -- no destructive-dst dance needed here
+                       unlike the x86-64/AArch64 cases above), lane 1 is
+                       0*0+0 = 0.0 into the shared scratch register,
+                       discarded -- matching the identity-lane
+                       convention the rest of the vN family's RISC-V
+                       fallback already uses. Shares OP_VADD's one-time
+                       stderr note (the note text lists vfma alongside
+                       the other vN mnemonics). */
     OP_VLOAD,     /* vload SYM > fDST;  load 128 bits (two adjacent f64
                        lanes) from SYM into fDST as one packed register
                        -- the memory-side counterpart of the vN

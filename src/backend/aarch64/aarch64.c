@@ -2059,6 +2059,30 @@ void emit__aarch64(FILE *out) {
             break;
         }
 
+        case OP_VFMA: {
+            /* fDST = fA*fB + fC lane-wise. NEON's fmla is accumulating
+               (dst += fA*fB), not a fresh three-source op the way
+               scalar fmadd is (OP_FMA's own AArch64 case), so fC is
+               moved into dst first via a whole-register fmov (16-byte
+               'v.16b' form -- fmov doesn't have a '.2d' spelling the
+               way the arithmetic ops do, since it's a plain bit copy,
+               not a lane-wise float op), then fmla v.2d accumulates
+               fA*fB on top. Same dN-to-vN leading-letter-swap trick as
+               OP_VDUP/etc for every operand. fA/fB/fC are
+               cas_expected/result_reg/cas_desired respectively, same
+               reuse as OP_FMA/OP_VFMA elsewhere. The move is skipped
+               when fC and dst are already the same register, same
+               move-if-different guard OP_FMA's own case uses. */
+            const char *dstd = reg__name(TARGET_AARCH64, &ins->dst);
+            const char *ad = reg__name(TARGET_AARCH64, &ins->cas_expected);
+            const char *bd = reg__name(TARGET_AARCH64, &ins->result_reg);
+            const char *cd = reg__name(TARGET_AARCH64, &ins->cas_desired);
+            if (strcmp(dstd, cd) != 0)
+                fprintf(out, "    fmov v%s.16b, v%s.16b\n", dstd + 1, cd + 1);
+            fprintf(out, "    fmla v%s.2d, v%s.2d, v%s.2d\n", dstd + 1, ad + 1, bd + 1);
+            break;
+        }
+
         case OP_FCMP:
             /* fcmp dst, src -- same LHS/RHS convention as OP_CMP (see
                OP_CMP's own comment at parse time and the opcode_t

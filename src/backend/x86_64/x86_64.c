@@ -1890,6 +1890,26 @@ void emit_x86_64(FILE *out) {
             break;
         }
 
+        case OP_VFMA: {
+            /* fDST = fA*fB + fC lane-wise via vfmadd213pd (AVX2+FMA's
+               packed-double 213-form -- same destructive-dst, same
+               operand-order naming as OP_FMA's own scalar vfmadd213sd,
+               just the 'pd' packed variant instead of 'sd'). dst must
+               first hold fB (the 213 form's implicit second
+               multiplicand), moved in via movapd if fB and dst differ
+               -- same move-if-different guard OP_FMA's own case uses,
+               just the packed move instruction instead of movsd/movss
+               (f64-only here, so no f32 width branch the way OP_FMA
+               needs one -- see the OP_VFMA opcode_t comment). fA/fB/fC
+               are cas_expected/result_reg/cas_desired respectively,
+               same reuse as OP_FMA. */
+            if (strcmp(reg__name(TARGET_X86_64, &ins->dst), reg__name(TARGET_X86_64, &ins->result_reg)) != 0)
+                fprintf(out, "    movapd %s, %s\n", reg__name(TARGET_X86_64, &ins->dst), reg__name(TARGET_X86_64, &ins->result_reg));
+            fprintf(out, "    vfmadd213pd %s, %s, %s\n", reg__name(TARGET_X86_64, &ins->dst),
+                    reg__name(TARGET_X86_64, &ins->cas_expected), reg__name(TARGET_X86_64, &ins->cas_desired));
+            break;
+        }
+
         case OP_FCMP:
             /* ucomisd dst, src -- same LHS/RHS convention as integer
                OP_CMP (dst is the left/accumulator operand, src is the
