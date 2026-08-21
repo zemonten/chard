@@ -101,5 +101,5 @@ I haven't made a full programing reference for chard yet. maybe when its core ma
 
 ## license
 
-haven't picked one yet don't do anything weird with it, for now 😊
+bro js go to the LICENSE file and read it, it's GPLv3
 
