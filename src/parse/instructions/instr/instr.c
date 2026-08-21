@@ -59,7 +59,7 @@ static opmap_t float_ops[] = {
     {"fsqrt", OP_FSQRT}, {"fabs", OP_FABS}, {"fneg", OP_FNEG}, {"fmin", OP_FMIN}, {"fmax", OP_FMAX},
     {"vadd", OP_VADD}, {"vsub", OP_VSUB}, {"vmul", OP_VMUL}, {"vdiv", OP_VDIV},
     {"vmin", OP_VMIN}, {"vmax", OP_VMAX},
-    {"vsqrt", OP_VSQRT}, {"vabs", OP_VABS}, {"vneg", OP_VNEG},
+    {"vsqrt", OP_VSQRT}, {"vabs", OP_VABS}, {"vneg", OP_VNEG}, {"vdup", OP_VDUP},
     {"vload", OP_VLOAD}, {"vstore", OP_VSTORE},
 };
 #define N_FLOAT_OP (sizeof(float_ops)/sizeof(float_ops[0]))
@@ -3854,14 +3854,17 @@ int parse_instr_line(char *tokens[], int ntok, const char *raw_trimmed) {
             if (i.dst.kind != OPND_REG || !i.dst.is_float) failf("'%s' requires a float register as its destination (op fSRC > fX)", float_ops[k].name);
             if (i.src.kind != OPND_REG || !i.src.is_float) failf("'%s' requires a float register as its source -- no float-literal immediate (a packed 2x-f64 op has no single-float literal form)", float_ops[k].name);
             break;
-        case OP_VSQRT: case OP_VABS: case OP_VNEG:
+        case OP_VSQRT: case OP_VABS: case OP_VNEG: case OP_VDUP:
             /* Unary like fsqrt/fabs/fneg (src is the whole input, no
                dst-as-input combine step), but register-only like the
                rest of the vN family (no float-literal source -- see
                OP_VADD's rejection just above; a packed op has no
                single-float literal spelling whether it's unary or
                destructive two-operand). src and dst may be the same
-               register (in-place), same as fsqrt/fabs/fneg. */
+               register (in-place), same as fsqrt/fabs/fneg. vdup
+               additionally only reads src's low lane (the other three
+               read both), but that's a codegen distinction, not an
+               operand-shape one -- the same rule applies here. */
             if (i.dst.kind != OPND_REG || !i.dst.is_float) failf("'%s' requires a float register as its destination (op fSRC > fX)", float_ops[k].name);
             if (i.src.kind != OPND_REG || !i.src.is_float) failf("'%s' requires a float register as its source -- no float-literal immediate (a packed 2x-f64 op has no single-float literal form)", float_ops[k].name);
             break;

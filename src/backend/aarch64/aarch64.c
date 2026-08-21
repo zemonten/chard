@@ -2039,6 +2039,26 @@ void emit__aarch64(FILE *out) {
             break;
         }
 
+        case OP_VDUP: {
+            /* NEON dup vDST.2d, vSRC.d[0] -- dedicated broadcast-from-
+               lane-0 instruction: reads src's low (and only relevant)
+               64-bit lane and replicates it into both lanes of dst.
+               Unlike OP_VSQRT/OP_VABS/OP_VNEG above this isn't a
+               'vN.2d, vN.2d' whole-register form -- the source operand
+               is written 'vSRC.d[0]' (an explicit single-lane index)
+               rather than 'vSRC.2d', since dup's source is always one
+               scalar lane, never a whole packed register, regardless
+               of what dst ends up as. Same dN-to-vN leading-letter-swap
+               trick as its siblings for both operands. No mask, no
+               scratch register, no immediate-source path (register-
+               only, see the OP_VDUP parse-time case, which folds into
+               the same case as vsqrt/vabs/vneg). */
+            const char *dstd = reg__name(TARGET_AARCH64, &ins->dst);
+            const char *srcd = reg__name(TARGET_AARCH64, &ins->src);
+            fprintf(out, "    dup v%s.2d, v%s.d[0]\n", dstd + 1, srcd + 1);
+            break;
+        }
+
         case OP_FCMP:
             /* fcmp dst, src -- same LHS/RHS convention as OP_CMP (see
                OP_CMP's own comment at parse time and the opcode_t

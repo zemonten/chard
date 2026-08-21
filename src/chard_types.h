@@ -504,6 +504,45 @@ typedef enum {
                        isn't the 0.0 every OTHER op's lane 1 happens to
                        be" situation OP_VDIV already established.
                        Shares OP_VADD's one-time stderr note. */
+    OP_VDUP,      /* vdup fSRC > fDST;  broadcast the scalar f64 in
+                       fSRC's low 64 bits into both lanes of fDST --
+                       the only way (besides vload from a real 2-element
+                       array) to populate a packed vN register: without
+                       it, turning one already-computed scalar into a
+                       vN operand for vadd/vmul/etc meant round-tripping
+                       through memory (fstore the scalar out, then vload
+                       it back doubled), even though the value was
+                       already sitting in a register. Unary like
+                       vsqrt/vabs/vneg (src is the whole input, no
+                       dst-as-input combine), register-only like the
+                       rest of the vN family -- no float-literal source
+                       (see OP_VADD's opcode_t comment; a literal would
+                       just be a compile-time-constant broadcast the
+                       caller could write into both lanes themselves via
+                       two fmov's, not worth a codegen path). src and
+                       dst may be the same register (in-place broadcast
+                       -- reads the low lane before the high lane is
+                       overwritten, so this is always safe).
+
+                       x86-64: SSE3 movddup dst, src (dedicated
+                       "move one double, duplicated" instruction -- not
+                       part of baseline SSE2 like the rest of the vN
+                       family's x86 forms, but SSE3 has shipped on every
+                       x86-64 CPU since 2004, so no feature-detection
+                       story is needed here any more than baseline SSE2
+                       needs one for the others). AArch64: NEON
+                       dup dst.2d, src.d[0] (dedicated broadcast-from-
+                       lane-0 instruction, same directness as vneg's
+                       fneg v.2d). RISC-V: no packed register (same "no
+                       fixed-width packed register" gap as every other
+                       vN op -- see OP_VADD), so this unrolls into two
+                       ordinary scalar fmv.d.d's (register-to-register
+                       double copy) writing the same source into both
+                       of the destination's underlying f-registers --
+                       simpler than vsqrt/vabs/vneg's fallback since
+                       there's no per-lane computation at all, just two
+                       copies of the same value. Shares OP_VADD's
+                       one-time stderr note. */
     OP_VLOAD,     /* vload SYM > fDST;  load 128 bits (two adjacent f64
                        lanes) from SYM into fDST as one packed register
                        -- the memory-side counterpart of the vN
@@ -1709,3 +1748,4 @@ static const target_def_t target_defs[3] = {
 };
 
 #endif /* CHARD_TYPES_H */
+

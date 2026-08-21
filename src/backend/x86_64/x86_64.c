@@ -1874,6 +1874,22 @@ void emit_x86_64(FILE *out) {
             break;
         }
 
+        case OP_VDUP: {
+            /* movddup dst, src -- SSE3 "move one double, duplicated":
+               reads src's low 64 bits and writes that same value into
+               both lanes of dst in one instruction. Dedicated broadcast
+               op, no mask/scratch needed (unlike OP_VABS/OP_VNEG above)
+               -- src and dst may safely be the same register since
+               movddup reads its whole source before writing any part
+               of the destination, same in-place safety sqrtpd/etc
+               already have. SSE3 rather than baseline SSE2 like the
+               rest of the vN family's x86 forms, but every x86-64 CPU
+               since 2004 has it, so no feature-detection story is
+               needed (see the OP_VDUP opcode_t comment). */
+            fprintf(out, "    movddup %s, %s\n", reg__name(TARGET_X86_64, &ins->dst), reg__name(TARGET_X86_64, &ins->src));
+            break;
+        }
+
         case OP_FCMP:
             /* ucomisd dst, src -- same LHS/RHS convention as integer
                OP_CMP (dst is the left/accumulator operand, src is the

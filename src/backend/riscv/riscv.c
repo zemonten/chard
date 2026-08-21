@@ -1974,6 +1974,53 @@ void emit__riscv(FILE *out) {
             break;
         }
 
+        case OP_VDUP: {
+            /* Same "no fixed-width packed register on RISC-V" gap as
+               OP_VADD/OP_VSQRT/etc above -- see those cases for the
+               full rationale and the shared one-time warning. Simplest
+               fallback in the whole vN family: no per-lane computation
+               at all (not even an identity op), just the same value
+               written twice -- lane 0 is dstreg = srcreg (a plain
+               register-to-register double copy, fmv.d), lane 1 is
+               the discarded scratch set to that same value, emitted
+               explicitly rather than skipped so the two-instruction
+               shape stays visible/consistent with the rest of the vN
+               family's fallback, even though (unlike vsqrt/vadd/etc)
+               there's no actual second lane being computed here for a
+               later op to read -- vdup's "lane 1" on this target is
+               purely cosmetic bookkeeping, not a real packed write. */
+            if (!g_riscv_vadd_warned) {
+                g_riscv_vadd_warned = 1;
+                fprintf(stderr,
+                    "note: 'vadd'/'vsub'/'vmul'/'vdiv'/'vmin'/'vmax'/'vsqrt'/'vabs'/'vneg'/'vdup' on "
+                    "--target=riscv are NOT real SIMD -- RISC-V has no fixed-width packed-double "
+                    "register (unlike x86-64 SSE2/AArch64 NEON), only the Vector extension "
+                    "(RVV), which needs runtime vsetvli setup this compiler does not emit. "
+                    "Falling back to two sequential scalar instructions per op (lane 0 = your "
+                    "values, lane 1 = the identity op'd with itself for the two-operand forms, "
+                    "applied to a synthesized 0.0 for the unary forms, or the same broadcast "
+                    "value again for vdup -- matching what an unused upper lane always holds on "
+                    "the other two targets: 0.0 for add/sub/mul/min/max/sqrt/abs, NaN for div, "
+                    "-0.0 for neg, the broadcast value itself for dup) -- correct result, but no "
+                    "parallelism and no speed benefit over the plain scalar f-ops on this "
+                    "target.\n");
+            }
+            {
+                const char *dstreg = reg__name(TARGET_RISCV, &ins->dst);
+                const char *srcreg = reg__name(TARGET_RISCV, &ins->src);
+                const char *fscratch = target_defs[TARGET_RISCV].fscratch;
+                /* Lane 0: the real broadcast source, copied into dst. */
+                fprintf(out, "    fmv.d %s, %s\n", dstreg, srcreg);
+                /* Lane 1: the same value again, into the (discarded)
+                   scratch register -- see the case comment above for
+                   why this is cosmetic rather than a real second lane
+                   write on this target. */
+                fprintf(out, "    fmv.d %s, %s\n", fscratch, srcreg);
+            }
+            break;
+        }
+
+
         case OP_FCMP:
             /* RISC-V has no single "set flags from float compare"
                instruction the way x86-64/AArch64 do -- flt.d/fle.d/
