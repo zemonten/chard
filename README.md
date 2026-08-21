@@ -1,4 +1,4 @@
-# sorry, but youre not a sigma.
+# chard
 small register-based asm-ish language i've been working on compiles to nasm-syntax assembly for x86-64, aarch64, and riscv no deps besides a c compiler and whatever assembler/linker you want to use for the actual
 target.
 
@@ -8,8 +8,9 @@ mv 10 > r2;
 add r2 > r1;
 exit(0);
 ```
+see that example? see how it points to its destination? see???
 
-not trying to be a real language, but atleast you don't need to write 50k lines of assembly times X architectures and it's actually structured too
+not trying to be a real language, but atleast you don't need to write thousands of lines of assembly times X architectures and it's actually structured too.
 
 ## building
 
@@ -18,9 +19,8 @@ cd src
 make
 ```
 
-that's it just needs gcc (or change CC in the makefile) there's also a
-single-file version of the whole thing (chard.c) if you'd rather just
-drop one file into your own build somewhere instead of the whole src/ because bro choose one
+that's it just needs gcc (or change CC in the makefile) 
+I'm genuinely wondering why you would try to manifest more information of this
 
 ## usage
 
@@ -38,9 +38,9 @@ gcc hello.o -o hello
 ./hello
 ```
 
-(elf mode links libc, bare mode doesn't because its fucking bare mode)
+(elf mode links libc, bare mode doesn't because its bare mode whattt)
 
-## what it actually has
+## gimmicks
 
 - 3 backends (x86-64 / aarch64 / riscv), pick with -target
 - `| mode elf;` vs `| mode bare;` (bare is default, no libc, freestanding)
@@ -49,7 +49,7 @@ gcc hello.o -o hello
 - structs, enums, local arrays, volatile/bss/rodata/data sections
 - macros (`%macro ... %endmacro`)
 - equ (constants) and alias (named registers)
-- global pins (lock a symbol to a register, compiler yells if you clobber it)
+- global pins (lock a symbol to a register, compiler skins you if you clobber it)
 - `| include` other files
 - errors actually point at the line and show source, e.g:
 
@@ -63,7 +63,7 @@ file to use it
    |
 ```
 
-quick example with a function + struct + enum + loop:
+quick example with a function, struct, enum, loop:
 
 ```
 | mode elf;
@@ -93,10 +93,13 @@ struct Point { i64 x; i64 y; };
 
 ## okay???
 
-if you're coding in assembly then chard make your life 100000% easier. come little children come to me
+yes. I plan on updating this README soon its going to be cooperate 
 
+## for more info on chard
+
+I haven't made a full programing reference for chard yet. maybe when its core matures a bit is all
 
 ## license
 
-haven't picked one yet don't do anything weird with it, for now 
+haven't picked one yet don't do anything weird with it, for now 😊
 
