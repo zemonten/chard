@@ -597,6 +597,43 @@ typedef enum {
                        fallback already uses. Shares OP_VADD's one-time
                        stderr note (the note text lists vfma alongside
                        the other vN mnemonics). */
+    OP_VFMS,      /* vfms fA, fB, fC > fDST;  packed 2x-f64 fused
+                       multiply-subtract: fDST = (fA*fB)-fC lane-wise.
+                       Sibling of OP_VFMA -- see that opcode_t comment
+                       for the full contract (register-only, f64-only,
+                       cas_expected/result_reg/cas_desired reused as
+                       fA/fB/fC, same x86-64/AArch64/RISC-V shape).
+                       x86-64: vfmsub213pd in place of OP_VFMA's
+                       vfmadd213pd, same destructive-dst dance.
+                       AArch64: NEON has no packed fmls-from-fresh-value
+                       form any more than OP_VFMA's fmla does, so fC is
+                       moved into dst first, then fmls v.2d subtracts
+                       fA*fB from it. RISC-V: fmsub.d dst, fA, fB, fC on
+                       lane 0 (fA*fB-fC natively), identity lane 1
+                       (0*0-0 = 0.0) on the shared scratch, same as
+                       OP_VFMA's fallback. Shares OP_VADD's one-time
+                       stderr note. */
+    OP_VFNMA,     /* vfnma fA, fB, fC > fDST;  packed 2x-f64 fused
+                       negate-multiply-add: fDST = fC-(fA*fB) lane-wise.
+                       Sibling of OP_VFMA/OP_VFMS -- see OP_VFMA's
+                       opcode_t comment for the full contract
+                       (register-only, f64-only, cas_expected/
+                       result_reg/cas_desired reused as fA/fB/fC, same
+                       x86-64/AArch64/RISC-V shape).
+                       x86-64: vfnmadd213pd in place of OP_VFMA's
+                       vfmadd213pd, same destructive-dst dance.
+                       AArch64: fC moved into dst first (as with
+                       OP_VFMA/OP_VFMS), then fmls v.2d computes
+                       dst - fA*fB, which is exactly fC-(fA*fB) once fC
+                       is sitting in dst -- reuses OP_VFMS's own NEON
+                       instruction, just with the operands already
+                       arranged to give the negated-product result.
+                       RISC-V: fnmsub.d dst, fA, fB, fC on lane 0
+                       (computes -(fA*fB)+fC = fC-(fA*fB) natively,
+                       identity lane 1 (0*0-0 negated, still 0.0) on the
+                       shared scratch, same as OP_VFMA/OP_VFMS's
+                       fallback. Shares OP_VADD's one-time stderr
+                       note. */
     OP_VLOAD,     /* vload SYM > fDST;  load 128 bits (two adjacent f64
                        lanes) from SYM into fDST as one packed register
                        -- the memory-side counterpart of the vN
